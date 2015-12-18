@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:int="http://www.springframework.org/schema/integration"
+    xmlns:int-kafka="http://www.springframework.org/schema/integration/kafka"
+    xmlns:task="http://www.springframework.org/schema/task"
+    xsi:schemaLocation="http://www.springframework.org/schema/integration/kafka http://www.springframework.org/schema/integration/kafka/spring-integration-kafka.xsd
+        http://www.springframework.org/schema/integration http://www.springframework.org/schema/integration/spring-integration.xsd
+        http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+        http://www.springframework.org/schema/task http://www.springframework.org/schema/task/spring-task.xsd">
+
+    <int:channel id="defaultReplyChannel" />
+
+    <int:gateway id="wordProcessor" default-reply-channel="defaultReplyChannel"
+        service-interface="proto.flink.WordProcessor">
+        <int:method name="count" request-channel="inputToKafka"
+            reply-channel="inputFromKafka">
+            <!-- <int:header name="kafka_messageKey" value="#{(T(java.util.UUID).randomUUID()).toString()}" 
+                /> -->
+        </int:method>
+    </int:gateway>
+
+
+    <!-- Channels -->
+    <!-- <int:channel id="inputToKafka" /> <int:channel id="inputFromKafka" 
+        /> -->
+
+    <int:publish-subscribe-channel id="inputToKafka" />
+    <int:publish-subscribe-channel id="inputFromKafka" />
+
+
+    <bean id="messageDebugger" class="proto.flink.ChannelsDebug" />
+    <int:service-activator input-channel="inputToKafka"
+        ref="messageDebugger" method="processOutMessage" />
+    <int:service-activator input-channel="inputFromKafka"
+        ref="messageDebugger" method="processInMessage" />
+
+    <!-- Kafka -->
+    <int-kafka:outbound-channel-adapter
+        id="kafkaOutboundChannelAdapter" kafka-producer-context-ref="kafkaProducerContext"
+        auto-startup="true" channel="inputToKafka" topic="si-request"
+        message-key-expression="headers.get('id').toString()" />
+
+
+    <int-kafka:producer-context id="kafkaProducerContext">
+        <int-kafka:producer-configurations>
+            <int-kafka:producer-configuration
+                broker-list="localhost:9092" key-class-type="java.lang.String"
+                value-class-type="java.lang.String" topic="si-request"
+                value-encoder="kafkaEncoder" key-encoder="kafkaEncoder"
+                compression-type="none" />
+        </int-kafka:producer-configurations>
+    </int-kafka:producer-context>
+
+    <bean id="kafkaEncoder"
+        class="org.springframework.integration.kafka.serializer.avro.AvroReflectDatumBackedKafkaEncoder">
+        <constructor-arg value="java.lang.String" />
+    </bean>
+<!-- 
+    <int-kafka:inbound-channel-adapter
+        id="kafkaInboundChannelAdapter" kafka-consumer-context-ref="consumerContext"
+        auto-startup="true" channel="inputFromKafka">
+        <int:poller fixed-delay="10" time-unit="MILLISECONDS"
+            max-messages-per-poll="5" />
+    </int-kafka:inbound-channel-adapter>
+    <int-kafka:consumer-context id="consumerContext"
+        consumer-timeout="4000" zookeeper-connect="zookeeperConnect">
+        <int-kafka:consumer-configurations>
+            <int-kafka:consumer-configuration
+                group-id="si-flink" value-decoder="kafkaValueDecoder"
+                key-decoder="kafkaDecoder" max-messages="5000">
+                <int-kafka:topic id="si-response"
+                    streams="4" />
+            </int-kafka:consumer-configuration>
+        </int-kafka:consumer-configurations>
+    </int-kafka:consumer-context>
+ -->
+    <bean id="kafkaConfiguration"
+        class="org.springframework.integration.kafka.core.ZookeeperConfiguration">
+        <constructor-arg ref="zookeeperConnect" />
+    </bean>
+
+    <bean id="connectionFactory"
+        class="org.springframework.integration.kafka.core.DefaultConnectionFactory">
+        <constructor-arg ref="kafkaConfiguration" />
+    </bean>
+
+    <bean id="decoder"
+        class="org.springframework.integration.kafka.serializer.common.StringDecoder" />
+
+    <int-kafka:message-driven-channel-adapter
+        id="adapter" channel="inputFromKafka" connection-factory="connectionFactory"
+        key-decoder="kafkaDecoder" payload-decoder="kafkaValueDecoder"
+        max-fetch="100" topics="${topics:si-response}" />
+ 
+    <bean id="kafkaDecoder"
+        class="org.springframework.integration.kafka.serializer.avro.AvroReflectDatumBackedKafkaDecoder">
+        <constructor-arg value="java.lang.String" />
+    </bean>
+
+    <bean id="kafkaValueDecoder"
+        class="org.springframework.integration.kafka.serializer.avro.AvroReflectDatumBackedKafkaDecoder">
+        <constructor-arg value="java.lang.String" />
+        <!-- <constructor-arg value="proto.flink.StringList"/> -->
+    </bean>
+
+    <int-kafka:zookeeper-connect id="zookeeperConnect"
+        zk-connect="localhost:2181" zk-connection-timeout="10000"
+        zk-session-timeout="100000" zk-sync-time="2000" />
+    <!-- end of Kafka -->
+
+
+    <int:logging-channel-adapter id="logger"
+        level="ERROR" />
+</beans>

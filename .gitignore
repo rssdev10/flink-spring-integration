@@ -1,0 +1,12 @@
+doc/**/*.aux
+doc/**/*.log
+doc/**/*.out
+doc/**/*.gz
+doc/**/*.toc
+target/
+.settings
+.classpath
+.project
+*.log
+.idea
+*.iml
