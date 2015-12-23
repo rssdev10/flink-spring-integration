@@ -81,7 +81,8 @@
 
     <bean id="connectionFactory"
         class="org.springframework.integration.kafka.core.DefaultConnectionFactory">
-        <constructor-arg ref="kafkaConfiguration" />
+        <!-- <constructor-arg ref="kafkaConfiguration" />  -->
+        <constructor-arg ref="brokerConfig" />
     </bean>
 
     <bean id="decoder"
@@ -90,7 +91,7 @@
     <int-kafka:message-driven-channel-adapter
         id="adapter" channel="inputFromKafka" connection-factory="connectionFactory"
         key-decoder="kafkaDecoder" payload-decoder="kafkaValueDecoder"
-        max-fetch="100" topics="${topics:si-response}" />
+        max-fetch="100" topics="si-response" />
  
     <bean id="kafkaDecoder"
         class="org.springframework.integration.kafka.serializer.avro.AvroReflectDatumBackedKafkaDecoder">
@@ -107,6 +108,12 @@
         zk-connect="localhost:2181" zk-connection-timeout="10000"
         zk-session-timeout="100000" zk-sync-time="2000" />
     <!-- end of Kafka -->
+
+
+    <bean id="brokerConfig"
+        class="org.springframework.integration.kafka.core.BrokerAddressListConfiguration">
+        <constructor-arg value="#{T(org.springframework.integration.kafka.core.BrokerAddress).fromAddress('localhost:9092')}" />
+    </bean>
 
 
     <int:logging-channel-adapter id="logger"
